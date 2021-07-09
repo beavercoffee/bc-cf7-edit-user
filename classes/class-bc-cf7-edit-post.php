@@ -52,6 +52,39 @@ if(!class_exists('BC_CF7_Edit_User')){
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    	private function copy($source = '', $destination = '', $overwrite = false, $mode = false){
+            global $wp_filesystem;
+            $fs = $this->filesystem();
+            if(is_wp_error($fs)){
+                return $fs;
+            }
+            if(!$wp_filesystem->copy($source, $destination, $overwrite)){
+                return new WP_Error('files_not_writable', sprintf(__('The uploaded file could not be moved to %s.'), $destination));
+            }
+            return $destination;
+        }
+
+    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    	private function filesystem(){
+            global $wp_filesystem;
+            if($wp_filesystem instanceof WP_Filesystem_Direct){
+                return true;
+            }
+            if(!function_exists('get_filesystem_method')){
+                require_once(ABSPATH . 'wp-admin/includes/file.php');
+            }
+            if('direct' !== get_filesystem_method()){
+                return new WP_Error('fs_unavailable', __('Could not access filesystem.'));
+            }
+            if(!WP_Filesystem()){
+                return new WP_Error('fs_error', __('Filesystem error.'));
+            }
+            return true;
+        }
+
+    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     	private function first_p($text = '', $dot = true){
             return $this->one_p($text, $dot, 'first');
         }
@@ -183,6 +216,37 @@ if(!class_exists('BC_CF7_Edit_User')){
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    	private function upload_file($tmp_name = '', $post_id = 0){
+            global $wp_filesystem;
+            $upload_dir = wp_upload_dir();
+            $original_filename = wp_basename($tmp_name);
+            $filename = wp_unique_filename($upload_dir['path'], $original_filename);
+            $file = trailingslashit($upload_dir['path']) . $filename;
+            $result = $this->copy($tmp_name, $file);
+            if(is_wp_error($result)){
+                return $result;
+            }
+            $filetype_and_ext = wp_check_filetype_and_ext($file, $filename);
+            if(!$filetype_and_ext['type']){
+                return new WP_Error('invalid_filetype', __('Sorry, this file type is not permitted for security reasons.'));
+            }
+            $attachment_id = wp_insert_attachment([
+                'guid' => str_replace($upload_dir['basedir'], $upload_dir['baseurl'], $file),
+                'post_mime_type' => $filetype_and_ext['type'],
+                'post_status' => 'inherit',
+                'post_title' => preg_replace('/\.[^.]+$/', '', $original_filename),
+            ], $file, $post_id, true);
+            if(is_wp_error($attachment_id)){
+                return $attachment_id;
+            }
+            $attachment = get_post($attachment_id);
+            wp_raise_memory_limit('image');
+            wp_maybe_generate_attachment_metadata($attachment);
+            return $attachment_id;
+        }
+
+    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     	//
     	// public
     	//
@@ -243,6 +307,7 @@ if(!class_exists('BC_CF7_Edit_User')){
             $user_id = $this->get_user_id($contact_form, $submission);
             if(is_wp_error($user_id)){
                 $submission->set_response($user_id->get_error_message());
+                $submission->set_status('aborted');
             }
             $this->user_id = $user_id;
             foreach($posted_data as $key => $value){
@@ -255,9 +320,33 @@ if(!class_exists('BC_CF7_Edit_User')){
 					update_user_meta($user_id, $key, $value);
 				}
 			}
+            $error = new WP_Error;
+            $uploaded_files = $submission->uploaded_files();
+            if($uploaded_files){
+                foreach($uploaded_files as $key => $value){
+                    delete_user_meta($post_id, $key . '_id');
+                    delete_user_meta($post_id, $key . '_filename');
+                    foreach((array) $value as $single){
+                        $attachment_id = $this->upload_file($single);
+                        if(is_wp_error($attachment_id)){
+                            $error->merge_from($attachment_id);
+                        } else {
+                            add_user_meta($post_id, $key . '_id', $attachment_id);
+                            add_user_meta($post_id, $key . '_filename', wp_basename($single));
+                        }
+                    }
+                }
+            }
+            do_action('bc_cf7_edit_user', $user_id, $contact_form, $error);
+            if($error->has_errors()){
+                $message = $error->get_error_message();
+                $message .=  ' ' . $this->last_p(__('Application passwords are not available for your account. Please contact the site administrator for assistance.'));
+                $submission->set_response($message);
+                $submission->set_status('aborted');
+                return;
+            }
             $submission->set_response(__('User updated.'));
             $submission->set_status('wpcf7_mail_sent');
-            do_action('bc_cf7_edit_user', $user_id);
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
