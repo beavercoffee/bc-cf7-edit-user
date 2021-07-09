@@ -257,6 +257,7 @@ if(!class_exists('BC_CF7_Edit_User')){
 			}
             $submission->set_response(__('User updated.'));
             $submission->set_status('wpcf7_mail_sent');
+            do_action('bc_cf7_edit_user', $user_id);
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
