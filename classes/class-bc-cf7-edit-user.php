@@ -9,7 +9,7 @@ if(!class_exists('BC_CF7_Edit_User')){
     	//
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-        private static $instance = null, $user_id = 0;
+        private static $instance = null;
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     	//
@@ -37,7 +37,7 @@ if(!class_exists('BC_CF7_Edit_User')){
     	//
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-        private $file = '';
+        private $file = '', $response_message = '', $user_id = 0;
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -70,12 +70,12 @@ if(!class_exists('BC_CF7_Edit_User')){
             } else {
                 $nonce = $submission->get_posted_data('bc_nonce');
                 if(null === $nonce){
-                    $missing['bc_nonce'];
+                    $missing[] = 'bc_nonce';
                 }
                 $user_id = $submission->get_posted_data('bc_user_id');
             }
             if(null === $user_id){
-                $missing['bc_user_id'];
+                $missing[] = 'bc_user_id';
             }
             if($missing){
                 return new WP_Error('bc_error', sprintf(__('Missing parameter(s): %s'), implode(', ', $missing)) . '.');
@@ -192,6 +192,8 @@ if(!class_exists('BC_CF7_Edit_User')){
             if(!has_filter('wpcf7_verify_nonce', 'is_user_logged_in')){
                 add_filter('wpcf7_verify_nonce', 'is_user_logged_in');
             }
+            add_action('wpcf7_mail_failed', [$this, 'wpcf7_mail_failed']);
+			add_action('wpcf7_mail_sent', [$this, 'wpcf7_mail_sent']);
             bc_build_update_checker('https://github.com/beavercoffee/bc-cf7-edit-user', $this->file, 'bc-cf7-edit-user');
         }
 
@@ -213,9 +215,9 @@ if(!class_exists('BC_CF7_Edit_User')){
             if(!$submission->is('init')){
                 return;
             }
-            $abort = true;
             $user_id = $this->get_user_id($contact_form, $submission);
             if(is_wp_error($user_id)){
+                $abort = true;
                 $submission->set_response($user_id->get_error_message());
                 $submission->set_status('aborted');
             }
@@ -249,14 +251,14 @@ if(!class_exists('BC_CF7_Edit_User')){
             }
             do_action('bc_cf7_edit_user', $user_id, $contact_form, $error);
             if($error->has_errors()){
+                $abort = true;
                 $message = $error->get_error_message();
                 $message .=  ' ' . bc_last_p(__('Application passwords are not available for your account. Please contact the site administrator for assistance.'));
                 $submission->set_response($message);
                 $submission->set_status('aborted');
                 return;
             }
-            $submission->set_response(__('User updated.'));
-            $submission->set_status('wpcf7_mail_sent');
+            $this->response_message = __('User updated.');
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -293,6 +295,46 @@ if(!class_exists('BC_CF7_Edit_User')){
                 }
             }
             return $hidden_fields;
+        }
+
+    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        public function wpcf7_mail_failed($contact_form){
+            if('edit-post' !== $this->get_type($contact_form)){
+                return;
+            }
+            $submission = WPCF7_Submission::get_instance();
+            if(null === $submission){
+                return;
+            }
+            if(!$submission->is('mail_failed')){
+                return;
+            }
+            if('' !== $this->response_message){
+                if($contact_form->message('mail_sent_ng') === $submission->get_response()){
+                    $submission->set_response($this->response_message);
+                }
+            }
+        }
+
+    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        public function wpcf7_mail_sent($contact_form){
+            if('edit-post' !== $this->get_type($contact_form)){
+                return;
+            }
+            $submission = WPCF7_Submission::get_instance();
+            if(null === $submission){
+                return;
+            }
+            if(!$submission->is('mail_sent')){
+                return;
+            }
+            if('' !== $this->response_message){
+                if($contact_form->message('mail_sent_ok') === $submission->get_response()){
+                    $submission->set_response($this->response_message);
+                }
+            }
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
