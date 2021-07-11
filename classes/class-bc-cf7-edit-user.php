@@ -115,12 +115,23 @@ if(!class_exists('BC_CF7_Edit_User')){
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    	private function output($user_id, $attr, $content, $tag){
+    	private function output($output, $user_id, $attr, $content, $tag){
+			$html = bc_str_get_html($output);
+			$wp_nonce = $html->find('[name="_wpnonce"]', 0);
+			$original_wp_nonce = $wp_nonce->value;
+			$bc_nonce = $html->find('[name="bc_nonce"]', 0);
+			$original_bc_nonce = $bc_nonce->value;
             $current_user_id = get_current_user_id();
             wp_set_current_user($user_id);
             $output = wpcf7_contact_form_tag_func($attr, $content, $tag);
             wp_set_current_user($current_user_id);
-            return $output;
+			$html = bc_str_get_html($output);
+			$wp_nonce = $html->find('[name="_wpnonce"]', 0);
+			$wp_nonce->value = $original_wp_nonce;
+			$bc_nonce = $html->find('[name="bc_nonce"]', 0);
+			$bc_nonce->value = $original_bc_nonce;
+			$output = $html->save();
+			return $output;
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -171,7 +182,7 @@ if(!class_exists('BC_CF7_Edit_User')){
                 return '<div class="alert alert-danger" role="alert">' . $user_id->get_error_message() . '</div>';
             }
             $content = isset($m[5]) ? $m[5] : null;
-            $output = $this->output($user_id, $attr, $content, $tag);
+            $output = $this->output($output, $user_id, $attr, $content, $tag);
             return $output;
         }
 
@@ -222,29 +233,32 @@ if(!class_exists('BC_CF7_Edit_User')){
                 $submission->set_status('aborted');
             }
             $this->user_id = $user_id;
-            foreach($posted_data as $key => $value){
-                if(is_array($value)){
-					delete_user_meta($user_id, $key);
-					foreach($value as $single){
-						add_user_meta($user_id, $key, $single);
+			$posted_data = $submission->get_posted_data();
+            if($posted_data){
+				foreach($posted_data as $key => $value){
+					if(is_array($value)){
+						delete_user_meta($user_id, $key);
+						foreach($value as $single){
+							add_user_meta($user_id, $key, $single);
+						}
+					} else {
+						update_user_meta($user_id, $key, $value);
 					}
-				} else {
-					update_user_meta($user_id, $key, $value);
 				}
 			}
             $error = new WP_Error;
             $uploaded_files = $submission->uploaded_files();
             if($uploaded_files){
                 foreach($uploaded_files as $key => $value){
-                    delete_user_meta($post_id, $key . '_id');
-                    delete_user_meta($post_id, $key . '_filename');
+                    delete_user_meta($user_id, $key . '_id');
+                    delete_user_meta($user_id, $key . '_filename');
                     foreach((array) $value as $single){
                         $attachment_id = $this->upload_file($single);
                         if(is_wp_error($attachment_id)){
                             $error->merge_from($attachment_id);
                         } else {
-                            add_user_meta($post_id, $key . '_id', $attachment_id);
-                            add_user_meta($post_id, $key . '_filename', wp_basename($single));
+                            add_user_meta($user_id, $key . '_id', $attachment_id);
+                            add_user_meta($user_id, $key . '_filename', wp_basename($single));
                         }
                     }
                 }
@@ -300,7 +314,7 @@ if(!class_exists('BC_CF7_Edit_User')){
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         public function wpcf7_mail_failed($contact_form){
-            if('edit-post' !== $this->get_type($contact_form)){
+            if('edit-user' !== $this->get_type($contact_form)){
                 return;
             }
             $submission = WPCF7_Submission::get_instance();
@@ -320,7 +334,7 @@ if(!class_exists('BC_CF7_Edit_User')){
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         public function wpcf7_mail_sent($contact_form){
-            if('edit-post' !== $this->get_type($contact_form)){
+            if('edit-user' !== $this->get_type($contact_form)){
                 return;
             }
             $submission = WPCF7_Submission::get_instance();
