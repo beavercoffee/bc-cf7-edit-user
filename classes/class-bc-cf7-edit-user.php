@@ -99,22 +99,6 @@ if(!class_exists('BC_CF7_Edit_User')){
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    	private function get_type($contact_form = null){
-            if(null === $contact_form){
-                $contact_form = wpcf7_get_current_contact_form();
-            }
-            if(null === $contact_form){
-                return '';
-            }
-            $type = $contact_form->pref('bc_type');
-            if(null === $type){
-                return '';
-            }
-            return $type;
-        }
-
-    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     	private function output($output, $user_id, $attr, $content, $tag){
 			$html = bc_str_get_html($output);
 			$wp_nonce = $html->find('[name="_wpnonce"]', 0);
@@ -174,7 +158,7 @@ if(!class_exists('BC_CF7_Edit_User')){
                 return $output;
             }
             $contact_form = wpcf7_get_current_contact_form();
-            if('edit-user' !== $this->get_type($contact_form)){
+            if('edit-user' !== bc_cf7_type($contact_form)){
                 return $output;
             }
             $user_id = $this->get_user_id($contact_form);
@@ -218,7 +202,7 @@ if(!class_exists('BC_CF7_Edit_User')){
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         public function wpcf7_before_send_mail($contact_form, &$abort, $submission){
-            if('edit-user' !== $this->get_type($contact_form)){
+            if('edit-user' !== bc_cf7_type($contact_form)){
                 return;
             }
             if(!$submission->is('init')){
@@ -265,13 +249,18 @@ if(!class_exists('BC_CF7_Edit_User')){
                 }
             }
             $response = __('User updated.');
-            if($submission->mail()){
-                $submission->set_response($response . ' ' . $contact_form->message('mail_sent_ok'));
+            if(bc_cf7_skip_mail($contact_form)){
+                $submission->set_response($response);
                 $submission->set_status('mail_sent');
-			} else {
-                $submission->set_response($response . ' ' . $contact_form->message('mail_sent_ng'));
-				$submission->set_status('mail_failed');
-			}
+            } else {
+                if(bc_cf7_mail($contact_form)){
+                    $submission->set_response($response . ' ' . $contact_form->message('mail_sent_ok'));
+                    $submission->set_status('mail_sent');
+                } else {
+                    $submission->set_response($response . ' ' . $contact_form->message('mail_sent_ng'));
+                    $submission->set_status('mail_failed');
+                }
+            }
             // maybe update metadata
             do_action('bc_cf7_edit_user', $user_id, $contact_form, $submission, $error);
         }
@@ -294,7 +283,7 @@ if(!class_exists('BC_CF7_Edit_User')){
 
         public function wpcf7_form_hidden_fields($hidden_fields){
             $contact_form = wpcf7_get_current_contact_form();
-            if('edit-user' !== $this->get_type($contact_form)){
+            if('edit-user' !== bc_cf7_type($contact_form)){
                 return $hidden_fields;
             }
             $user_id = $this->get_user_id($contact_form);
