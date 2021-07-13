@@ -37,7 +37,7 @@ if(!class_exists('BC_CF7_Edit_User')){
     	//
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-        private $file = '', $response_message = '', $user_id = 0;
+        private $file = '', $user_id = 0;
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -224,13 +224,14 @@ if(!class_exists('BC_CF7_Edit_User')){
                 return;
             }
             if(!$submission->is('init')){
-                return;
+                return; // prevent conflicts with other plugins
             }
+            $abort = true; // prevent mail
             $user_id = $this->get_user_id($contact_form, $submission);
             if(is_wp_error($user_id)){
-                $abort = true;
                 $submission->set_response($user_id->get_error_message());
-                $submission->set_status('aborted');
+                $submission->set_status('aborted'); // try to prevent conflicts with other plugins
+                return;
             }
             $this->user_id = $user_id;
 			$posted_data = $submission->get_posted_data();
@@ -255,6 +256,8 @@ if(!class_exists('BC_CF7_Edit_User')){
                     foreach((array) $value as $single){
                         $attachment_id = $this->upload_file($single);
                         if(is_wp_error($attachment_id)){
+                            add_user_meta($post_id, $key . '_id', 0);
+                            add_user_meta($post_id, $key . '_filename', $attachment_id->get_error_message());
                             $error->merge_from($attachment_id);
                         } else {
                             add_user_meta($user_id, $key . '_id', $attachment_id);
@@ -264,15 +267,8 @@ if(!class_exists('BC_CF7_Edit_User')){
                 }
             }
             do_action('bc_cf7_edit_user', $user_id, $contact_form, $error);
-            if($error->has_errors()){
-                $abort = true;
-                $message = $error->get_error_message();
-                $message .=  ' ' . bc_last_p(__('Application passwords are not available for your account. Please contact the site administrator for assistance.'));
-                $submission->set_response($message);
-                $submission->set_status('aborted');
-                return;
-            }
-            $this->response_message = __('User updated.');
+            $submission->set_response(__('User updated.'));
+            $submission->set_status('mail_sent');
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -309,46 +305,6 @@ if(!class_exists('BC_CF7_Edit_User')){
                 }
             }
             return $hidden_fields;
-        }
-
-    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-        public function wpcf7_mail_failed($contact_form){
-            if('edit-user' !== $this->get_type($contact_form)){
-                return;
-            }
-            $submission = WPCF7_Submission::get_instance();
-            if(null === $submission){
-                return;
-            }
-            if(!$submission->is('mail_failed')){
-                return;
-            }
-            if('' !== $this->response_message){
-                if($contact_form->message('mail_sent_ng') === $submission->get_response()){
-                    $submission->set_response($this->response_message);
-                }
-            }
-        }
-
-    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-        public function wpcf7_mail_sent($contact_form){
-            if('edit-user' !== $this->get_type($contact_form)){
-                return;
-            }
-            $submission = WPCF7_Submission::get_instance();
-            if(null === $submission){
-                return;
-            }
-            if(!$submission->is('mail_sent')){
-                return;
-            }
-            if('' !== $this->response_message){
-                if($contact_form->message('mail_sent_ok') === $submission->get_response()){
-                    $submission->set_response($this->response_message);
-                }
-            }
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
