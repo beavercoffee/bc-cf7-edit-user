@@ -216,38 +216,6 @@ if(!class_exists('BC_CF7_Edit_User')){
                 return;
             }
             $this->user_id = $user_id;
-			$posted_data = $submission->get_posted_data();
-            if($posted_data){
-				foreach($posted_data as $key => $value){
-					if(is_array($value)){
-						delete_user_meta($user_id, $key);
-						foreach($value as $single){
-							add_user_meta($user_id, $key, $single);
-						}
-					} else {
-						update_user_meta($user_id, $key, $value);
-					}
-				}
-			}
-            $error = new WP_Error;
-            $uploaded_files = $submission->uploaded_files();
-            if($uploaded_files){
-                foreach($uploaded_files as $key => $value){
-                    delete_user_meta($user_id, $key . '_id');
-                    delete_user_meta($user_id, $key . '_filename');
-                    foreach((array) $value as $single){
-                        $attachment_id = $this->upload_file($single);
-                        if(is_wp_error($attachment_id)){
-                            add_user_meta($post_id, $key . '_id', 0);
-                            add_user_meta($post_id, $key . '_filename', $attachment_id->get_error_message());
-                            $error->merge_from($attachment_id);
-                        } else {
-                            add_user_meta($user_id, $key . '_id', $attachment_id);
-                            add_user_meta($user_id, $key . '_filename', wp_basename($single));
-                        }
-                    }
-                }
-            }
             $response = __('User updated.');
             if(bc_cf7_skip_mail($contact_form)){
                 $submission->set_response($response);
@@ -261,8 +229,10 @@ if(!class_exists('BC_CF7_Edit_User')){
                     $submission->set_status('mail_failed');
                 }
             }
-            // maybe update metadata
-            do_action('bc_cf7_edit_user', $user_id, $contact_form, $submission, $error);
+            bc_cf7_update_meta_data(bc_cf7_meta_data($contact_form, $submission), $user_id, 'user');
+            bc_cf7_update_posted_data($submission->get_posted_data(), $user_id, 'user');
+            bc_cf7_update_uploaded_files($submission->uploaded_files(), $user_id, 'user');
+            do_action('bc_cf7_edit_user', $user_id, $contact_form, $submission);
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
