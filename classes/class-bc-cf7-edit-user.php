@@ -138,19 +138,26 @@ if(!class_exists('BC_CF7_Edit_User')){
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    	private function upload_file($tmp_name = '', $post_id = 0){
-            $file = bc_move_uploaded_file($tmp_name);
-            if(is_wp_error($file)){
-                return $file;
-            }
-            return bc_upload($file, $post_id);
-        }
-
-    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     	//
     	// public
     	//
+    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        public function bc_cf7_free_text_value($value, $tag){
+            if('' !== $value){
+                return $value;
+            }
+            $contact_form = wpcf7_get_current_contact_form();
+            if('edit-user' !== bc_cf7_type($contact_form)){
+                return $value;
+            }
+            $user_id = $this->get_user_id($contact_form);
+            if(is_wp_error($user_id)){
+                return $value;
+            }
+            return get_user_meta($user_id, $tag->name . '_free_text', true);
+        }
+
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         public function do_shortcode_tag($output, $tag, $attr, $m){
@@ -179,9 +186,10 @@ if(!class_exists('BC_CF7_Edit_User')){
             if(!defined('WPCF7_VERSION')){
         		return;
         	}
+            add_action('wpcf7_before_send_mail', [$this, 'wpcf7_before_send_mail'], 10, 3);
+            add_filter('bc_cf7_free_text_value', [$this, 'bc_cf7_free_text_value'], 10, 2);
             add_filter('do_shortcode_tag', [$this, 'do_shortcode_tag'], 10, 4);
             add_filter('shortcode_atts_wpcf7', [$this, 'shortcode_atts_wpcf7'], 10, 3);
-            add_action('wpcf7_before_send_mail', [$this, 'wpcf7_before_send_mail'], 10, 3);
             add_filter('wpcf7_feedback_response', [$this, 'wpcf7_feedback_response'], 15, 2);
             add_filter('wpcf7_form_hidden_fields', [$this, 'wpcf7_form_hidden_fields'], 15);
             add_filter('wpcf7_posted_data', [$this, 'wpcf7_posted_data']);
@@ -296,16 +304,17 @@ if(!class_exists('BC_CF7_Edit_User')){
 			if(wpcf7_form_tag_supports($type, 'selectable-values')){
                 $value = (array) $value;
                 $value_orig = (array) $value_orig;
-				if($tag->has_option('free_text') and isset($_POST[$name . '_free_text'])){
+				if($tag->has_option('free_text')){
         			$last_val = array_pop($value);
 					list($tied_item) = array_slice(WPCF7_USE_PIPE ? $tag->pipes->collect_afters() : $tag->values, -1, 1);
 					$tied_item = html_entity_decode($tied_item, ENT_QUOTES, 'UTF-8');
-        			if($last_val === $tied_item){
-        				$value[] = $last_val;
-        			} else {
-        				$value[] = $tied_item;
-        				$this->additional_data[$name . '_free_text'] = trim(str_replace($tied_item, '', $last_val));
-        			}
+					if(strpos($last_val, $tied_item) === 0){
+						$value[] = $tied_item;
+						$this->additional_data[$name . '_free_text'] = trim(str_replace($tied_item, '', $last_val));
+					} else {
+						$value[] = $last_val;
+						$this->additional_data[$name . '_free_text'] = '';
+					}
                 }
             }
 			if(WPCF7_USE_PIPE and $pipes instanceof WPCF7_Pipes and !$pipes->zero()){
