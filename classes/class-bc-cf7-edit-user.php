@@ -191,7 +191,11 @@ if(!class_exists('BC_CF7_Edit_User')){
 			if('contact-form-7' !== $tag){
                 return $output;
             }
-            if(!$this->is_type()){
+            $contact_form = wpcf7_get_current_contact_form();
+            if(null === $contact_form){
+                return $output;
+            }
+            if(!$this->is_type($contact_form)){
                 return $output;
             }
             $user_id = $this->get_user_id();
