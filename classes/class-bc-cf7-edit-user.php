@@ -48,7 +48,6 @@ if(!class_exists('BC_CF7_Edit_User')){
     	private function __construct($file = ''){
             $this->file = $file;
             add_action('bc_cf7_loaded', [$this, 'bc_cf7_loaded']);
-            add_action('bc_functions_loaded', [$this, 'bc_functions_loaded']);
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -182,18 +181,8 @@ if(!class_exists('BC_CF7_Edit_User')){
             if(!has_filter('wpcf7_verify_nonce', 'is_user_logged_in')){
                 add_filter('wpcf7_verify_nonce', 'is_user_logged_in');
             }
-            do_action('bc_cf7_edit_user_loaded');
-        }
-
-    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-        public function bc_functions_loaded(){
             bc_build_update_checker('https://github.com/beavercoffee/bc-cf7-edit-user', $this->file, 'bc-cf7-edit-user');
-            if(!bc_is_plugin_active('bc-cf7/bc-cf7.php')){
-                add_action('admin_notices', function(){
-                    echo bc_admin_notice(sprintf(__('No plugins found for: %s.'),'<strong>BC CF7</strong>'));
-                });
-        	}
+            do_action('bc_cf7_edit_user_loaded');
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

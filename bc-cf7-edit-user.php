@@ -12,7 +12,7 @@ Plugin URI: https://github.com/beavercoffee/bc-cf7-edit-user
 Requires at least: 5.7
 Requires PHP: 5.6
 Text Domain: bc-cf7-edit-user
-Version: 1.7.17.1
+Version: 1.7.17.2
 */
 
 if(defined('ABSPATH')){
