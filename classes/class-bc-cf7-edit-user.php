@@ -37,7 +37,7 @@ if(!class_exists('BC_CF7_Edit_User')){
     	//
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-        private $additional_data = [], $file = '', $user_id = 0;
+        private $file = '', $user_id = 0;
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -47,23 +47,30 @@ if(!class_exists('BC_CF7_Edit_User')){
 
     	private function __construct($file = ''){
             $this->file = $file;
-            add_action('plugins_loaded', [$this, 'plugins_loaded']);
+            add_action('bc_cf7_loaded', [$this, 'bc_cf7_loaded']);
+            add_action('bc_functions_loaded', [$this, 'bc_functions_loaded']);
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         private function get_user_id($contact_form = null, $submission = null){
             if(null === $contact_form){
+                $contact_form = wpcf7_get_current_contact_form();
+            }
+            if(null === $contact_form){
                 return new WP_Error('bc_error', __('The requested contact form was not found.', 'contact-form-7'));
             }
-            $type = $contact_form->pref('bc_type');
-            if(null === $type){
+            $type = bc_cf7()->type($contact_form);
+            if('' === $type){
                 return new WP_Error('bc_error', sprintf(__('Missing parameter(s): %s'), 'bc_type') . '.');
             }
-            if($type !== 'edit-user'){
+            if(!$this->is_type($contact_form)){
                 return new WP_Error('bc_error', sprintf(__('%1$s is not of type %2$s.'), $type, 'edit-user'));
             }
             $missing = [];
+            if(null === $submission){
+                $submission = WPCF7_Submission::get_instance();
+            }
             if(null === $submission){
                 $nonce = null;
                 $user_id = $contact_form->shortcode_attr('bc_user_id');
@@ -95,6 +102,12 @@ if(!class_exists('BC_CF7_Edit_User')){
                 return new WP_Error('bc_error', $message);
 			}
             return $user_id;
+        }
+
+    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    	private function is_type($contact_form = null){
+            return bc_cf7()->is_type('edit-user', $contact_form);
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -147,8 +160,7 @@ if(!class_exists('BC_CF7_Edit_User')){
             if('' !== $value){
                 return $value;
             }
-            $contact_form = wpcf7_get_current_contact_form();
-            if('edit-user' !== bc_cf7_type($contact_form)){
+            if(!$this->is_type()){
                 return $value;
             }
             $user_id = $this->get_user_id($contact_form);
@@ -160,49 +172,46 @@ if(!class_exists('BC_CF7_Edit_User')){
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-        public function do_shortcode_tag($output, $tag, $attr, $m){
-			if('contact-form-7' !== $tag){
-                return $output;
-            }
-            $contact_form = wpcf7_get_current_contact_form();
-            if('edit-user' !== bc_cf7_type($contact_form)){
-                return $output;
-            }
-            $user_id = $this->get_user_id($contact_form);
-            if(is_wp_error($user_id)){
-                return '<div class="alert alert-danger" role="alert">' . $user_id->get_error_message() . '</div>';
-            }
-            $content = isset($m[5]) ? $m[5] : null;
-            $output = $this->output($output, $user_id, $attr, $content, $tag);
-            return $output;
+        public function bc_functions_loaded(){
+            bc_build_update_checker('https://github.com/beavercoffee/bc-cf7-edit-user', $this->file, 'bc-cf7-edit-user');
+            if(!bc_is_plugin_active('bc-cf7/bc-cf7.php')){
+                add_action('admin_notices', function(){
+                    echo bc_admin_notice(sprintf(__('No plugins found for: %s.'),'<strong>BC CF7</strong>'));
+                });
+        	}
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-        public function plugins_loaded(){
-            if(!defined('BC_FUNCTIONS')){
-        		return;
-        	}
-            if(!defined('WPCF7_VERSION')){
-        		return;
-        	}
+        public function bc_cf7_loaded(){
             add_action('wpcf7_before_send_mail', [$this, 'wpcf7_before_send_mail'], 10, 3);
             add_filter('bc_cf7_free_text_value', [$this, 'bc_cf7_free_text_value'], 10, 2);
             add_filter('do_shortcode_tag', [$this, 'do_shortcode_tag'], 10, 4);
             add_filter('shortcode_atts_wpcf7', [$this, 'shortcode_atts_wpcf7'], 10, 3);
             add_filter('wpcf7_feedback_response', [$this, 'wpcf7_feedback_response'], 15, 2);
             add_filter('wpcf7_form_hidden_fields', [$this, 'wpcf7_form_hidden_fields'], 15);
-            add_filter('wpcf7_posted_data', [$this, 'wpcf7_posted_data']);
-            add_filter('wpcf7_posted_data_checkbox', [$this, 'wpcf7_posted_data_type'], 10, 3);
-            add_filter('wpcf7_posted_data_checkbox*', [$this, 'wpcf7_posted_data_type'], 10, 3);
-            add_filter('wpcf7_posted_data_radio', [$this, 'wpcf7_posted_data_type'], 10, 3);
-            add_filter('wpcf7_posted_data_radio*', [$this, 'wpcf7_posted_data_type'], 10, 3);
-            add_filter('wpcf7_posted_data_select', [$this, 'wpcf7_posted_data_type'], 10, 3);
-            add_filter('wpcf7_posted_data_select*', [$this, 'wpcf7_posted_data_type'], 10, 3);
             if(!has_filter('wpcf7_verify_nonce', 'is_user_logged_in')){
                 add_filter('wpcf7_verify_nonce', 'is_user_logged_in');
             }
-            bc_build_update_checker('https://github.com/beavercoffee/bc-cf7-edit-user', $this->file, 'bc-cf7-edit-user');
+            do_action('bc_cf7_edit_user_loaded');
+        }
+
+    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        public function do_shortcode_tag($output, $tag, $attr, $m){
+			if('contact-form-7' !== $tag){
+                return $output;
+            }
+            if(!$this->is_type()){
+                return $output;
+            }
+            $user_id = $this->get_user_id();
+            if(is_wp_error($user_id)){
+                return '<div class="alert alert-danger" role="alert">' . $user_id->get_error_message() . '</div>';
+            }
+            $content = isset($m[5]) ? $m[5] : null;
+            $output = $this->output($output, $user_id, $attr, $content, $tag);
+            return $output;
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -217,7 +226,7 @@ if(!class_exists('BC_CF7_Edit_User')){
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         public function wpcf7_before_send_mail($contact_form, &$abort, $submission){
-            if('edit-user' !== bc_cf7_type($contact_form)){
+            if(!$this->is_type($contact_form)){
                 return;
             }
             if(!$submission->is('init')){
@@ -232,11 +241,11 @@ if(!class_exists('BC_CF7_Edit_User')){
             }
             $this->user_id = $user_id;
             $response = __('User updated.');
-            if(bc_cf7_skip_mail($contact_form)){
+            if(bc_cf7()->skip_mail($contact_form)){
                 $submission->set_response($response);
                 $submission->set_status('mail_sent');
             } else {
-                if(bc_cf7_mail($contact_form)){
+                if(bc_cf7()->mail($contact_form)){
                     $submission->set_response($response . ' ' . $contact_form->message('mail_sent_ok'));
                     $submission->set_status('mail_sent');
                 } else {
@@ -244,9 +253,7 @@ if(!class_exists('BC_CF7_Edit_User')){
                     $submission->set_status('mail_failed');
                 }
             }
-            bc_cf7_update_meta_data(bc_cf7_meta_data($contact_form, $submission), $user_id, 'user');
-            bc_cf7_update_posted_data($submission->get_posted_data(), $user_id, 'user');
-            bc_cf7_update_uploaded_files($submission->uploaded_files(), $user_id, 'user');
+            bc_cf7()->update($contact_form, $submission, 'user', $user_id);
             do_action('bc_cf7_edit_user', $user_id, $contact_form, $submission);
         }
 
@@ -267,11 +274,10 @@ if(!class_exists('BC_CF7_Edit_User')){
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         public function wpcf7_form_hidden_fields($hidden_fields){
-            $contact_form = wpcf7_get_current_contact_form();
-            if('edit-user' !== bc_cf7_type($contact_form)){
+            if(!$this->is_type()){
                 return $hidden_fields;
             }
-            $user_id = $this->get_user_id($contact_form);
+            $user_id = $this->get_user_id();
             if(is_wp_error($user_id)){
                 return $hidden_fields;
             }
@@ -284,44 +290,6 @@ if(!class_exists('BC_CF7_Edit_User')){
                 }
             }
             return $hidden_fields;
-        }
-
-    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-        public function wpcf7_posted_data($posted_data){
-            if($this->additional_data){
-                $posted_data = array_merge($posted_data, $this->additional_data);
-            }
-            return $posted_data;
-        }
-
-    	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-        public function wpcf7_posted_data_type($value, $value_orig, $tag){
-			$name = $tag->name;
-            $pipes = $tag->pipes;
-            $type = $tag->type;
-			if(wpcf7_form_tag_supports($type, 'selectable-values')){
-                $value = (array) $value;
-                $value_orig = (array) $value_orig;
-				if($tag->has_option('free_text')){
-        			$last_val = array_pop($value);
-					list($tied_item) = array_slice(WPCF7_USE_PIPE ? $tag->pipes->collect_afters() : $tag->values, -1, 1);
-					$tied_item = html_entity_decode($tied_item, ENT_QUOTES, 'UTF-8');
-					if(strpos($last_val, $tied_item) === 0){
-						$value[] = $tied_item;
-						$this->additional_data[$name . '_free_text'] = trim(str_replace($tied_item, '', $last_val));
-					} else {
-						$value[] = $last_val;
-						$this->additional_data[$name . '_free_text'] = '';
-					}
-                }
-            }
-			if(WPCF7_USE_PIPE and $pipes instanceof WPCF7_Pipes and !$pipes->zero()){
-				$this->additional_data[$name . '_value'] = $value;
-				$value = $value_orig;
-            }
-            return $value;
         }
 
     	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
