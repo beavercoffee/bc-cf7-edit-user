@@ -178,9 +178,6 @@ if(!class_exists('BC_CF7_Edit_User')){
             add_filter('shortcode_atts_wpcf7', [$this, 'shortcode_atts_wpcf7'], 10, 3);
             add_filter('wpcf7_feedback_response', [$this, 'wpcf7_feedback_response'], 15, 2);
             add_filter('wpcf7_form_hidden_fields', [$this, 'wpcf7_form_hidden_fields'], 15);
-            if(!has_filter('wpcf7_verify_nonce', 'is_user_logged_in')){
-                add_filter('wpcf7_verify_nonce', 'is_user_logged_in');
-            }
             bc_build_update_checker('https://github.com/beavercoffee/bc-cf7-edit-user', $this->file, 'bc-cf7-edit-user');
             do_action('bc_cf7_edit_user_loaded');
         }
